@@ -1,0 +1,218 @@
+# =============================================================================
+# Operating systems
+# =============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100/
+.Trashes/
+Thumbs.db
+Thumbs.db:encryptable
+Desktop.ini
+$RECYCLE.BIN/
+
+# =============================================================================
+# Editors and IDEs
+# =============================================================================
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.fleet/
+.history/
+*.code-workspace
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.swp
+*.swo
+*~
+
+# =============================================================================
+# Logs, temporary files and local reports
+# =============================================================================
+*.log
+*.tmp
+*.temp
+*.bak
+*.old
+*.orig
+*.rej
+*.pid
+*.seed
+*.stackdump
+*.trace
+*.dmp
+tmp/
+temp/
+.cache/
+coverage/
+htmlcov/
+.coverage
+.coverage.*
+
+# =============================================================================
+# Environment variables and local secrets
+# =============================================================================
+.env
+.env.*
+!.env.example
+*.local
+*.secret
+secrets/
+
+# Certificates, signing keys and credentials
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+key.properties
+service-account*.json
+google-services.local.json
+
+# =============================================================================
+# Python server
+# =============================================================================
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+.hypothesis/
+.tox/
+.nox/
+.eggs/
+*.egg
+*.egg-info/
+dist/
+sdist/
+wheels/
+build/
+develop-eggs/
+downloads/
+parts/
+var/
+share/python-wheels/
+MANIFEST
+
+# Python IDE and notebook artifacts
+.python-version
+.ipynb_checkpoints/
+.pdm-python
+.pdm-build/
+__pypackages__/
+
+# =============================================================================
+# Dart and Flutter
+# =============================================================================
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+**/doc/api/
+**/flutter_export_environment.sh
+**/Flutter/ephemeral/
+**/flutter/ephemeral/
+**/ios/Flutter/.last_build_id
+mobile_app/build/
+mobile_app/coverage/
+mobile_app/.metadata.local
+
+# Generated symbols and obfuscation maps
+app.*.symbols
+app.*.map.json
+
+# =============================================================================
+# Android and Gradle
+# =============================================================================
+.gradle/
+**/.gradle/
+**/local.properties
+**/.cxx/
+**/captures/
+**/GeneratedPluginRegistrant.java
+mobile_app/android/app/debug/
+mobile_app/android/app/profile/
+mobile_app/android/app/release/
+
+# Android build outputs
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+# Keep the Gradle Wrapper in Git for reproducible builds.
+!mobile_app/android/gradle/wrapper/gradle-wrapper.jar
+!mobile_app/android/gradlew
+!mobile_app/android/gradlew.bat
+
+# =============================================================================
+# Apple platforms, CocoaPods and Xcode
+# =============================================================================
+**/Pods/
+**/.symlinks/
+**/DerivedData/
+**/xcuserdata/
+*.xcuserstate
+*.mode1v3
+*.mode2v3
+*.moved-aside
+*.pbxuser
+*.perspectivev3
+*.hmap
+*.ipa
+
+# Keep default Xcode project settings.
+!default.mode1v3
+!default.mode2v3
+!default.pbxuser
+!default.perspectivev3
+
+# =============================================================================
+# Windows, Linux and macOS native build outputs
+# =============================================================================
+mobile_app/windows/flutter/ephemeral/
+mobile_app/linux/flutter/ephemeral/
+mobile_app/macos/Flutter/ephemeral/
+mobile_app/macos/Pods/
+mobile_app/windows/x64/
+mobile_app/windows/x86/
+
+# =============================================================================
+# Local databases and runtime data
+# =============================================================================
+# Project source database DB.sqlite is intentionally tracked.
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+*.db-journal
+
+# =============================================================================
+# Generated archives and local exports
+# =============================================================================
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.gz
+*.tgz
+
