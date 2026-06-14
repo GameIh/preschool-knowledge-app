@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:preschool_knowledge_app/main.dart';
 
@@ -19,5 +20,24 @@ void main() {
 
     expect(find.text('Создать аккаунт'), findsOneWidget);
     expect(find.text('Имя'), findsOneWidget);
+  });
+
+  testWidgets('page shell fills the available height', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: PageShell(
+            title: 'Короткая страница',
+            subtitle: 'Проверка фона',
+            children: [Text('Контент')],
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      tester.getSize(find.byType(GradientBackground)).height,
+      tester.getSize(find.byType(Scaffold)).height,
+    );
   });
 }

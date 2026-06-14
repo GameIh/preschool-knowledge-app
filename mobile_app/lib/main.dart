@@ -210,6 +210,7 @@ class _MainShellState extends State<MainShell> {
     ];
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF0F9FF),
       body: pages[_index],
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
@@ -1469,20 +1470,37 @@ class PageShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: GradientBackground(
-        child: SafeArea(
-          bottom: false,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TopBar(title: title, subtitle: subtitle, action: action),
-                const SizedBox(height: 14),
-                ...children,
-              ],
+    return SizedBox.expand(
+      child: Material(
+        color: Colors.transparent,
+        child: GradientBackground(
+          child: SafeArea(
+            bottom: false,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          TopBar(
+                            title: title,
+                            subtitle: subtitle,
+                            action: action,
+                          ),
+                          const SizedBox(height: 14),
+                          ...children,
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ),
@@ -1498,20 +1516,22 @@ class GradientBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFFFF7ED),
-            Color(0xFFF0F9FF),
-            Color(0xFFFDF2F8),
-            Color(0xFFF0FDF4),
-          ],
+    return SizedBox.expand(
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFFFFF7ED),
+              Color(0xFFF0F9FF),
+              Color(0xFFFDF2F8),
+              Color(0xFFF0FDF4),
+            ],
+          ),
         ),
+        child: child,
       ),
-      child: child,
     );
   }
 }
