@@ -9,6 +9,19 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   Database? _database;
+  String? _activeOwnerId;
+
+  void setActiveOwnerId(String? ownerId) {
+    _activeOwnerId = ownerId;
+  }
+
+  String get _ownerId {
+    final value = _activeOwnerId;
+    if (value == null || value.isEmpty) {
+      throw StateError('Пользователь не авторизован');
+    }
+    return value;
+  }
 
   Future<Database> get database async {
     final existing = _database;
@@ -25,12 +38,28 @@ class AppDatabase {
     final dbPath = await getDatabasesPath();
     return openDatabase(
       p.join(dbPath, 'preschool_knowledge.db'),
-      version: 1,
+      version: 2,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
       onCreate: (db, version) async {
         await _createSchema(db);
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute(
+            "alter table children add column owner_id TEXT not null default 'legacy'",
+          );
+          await db.execute(
+            "alter table activity_logs add column owner_id TEXT not null default 'legacy'",
+          );
+          await db.execute(
+            'create index if not exists idx_children_owner on children(owner_id)',
+          );
+          await db.execute(
+            'create index if not exists idx_logs_owner on activity_logs(owner_id)',
+          );
+        }
       },
       onOpen: (db) async {
         await _seedIfNeeded(db);
@@ -84,6 +113,7 @@ class AppDatabase {
       create table children
       (
           id         INTEGER primary key autoincrement,
+          owner_id   TEXT not null,
           name       TEXT not null,
           birth_date TEXT,
           age_months INTEGER,
@@ -94,6 +124,7 @@ class AppDatabase {
       create table activity_logs
       (
           id          INTEGER primary key autoincrement,
+          owner_id    TEXT not null,
           child_id    INTEGER not null references children on delete cascade,
           activity_id INTEGER not null references activities,
           date_time   TEXT default (datetime('now')) not null,
@@ -184,6 +215,8 @@ class AppDatabase {
       )
       ''',
       'insert into sync_state (id) values (1)',
+      'create index idx_children_owner on children(owner_id)',
+      'create index idx_logs_owner on activity_logs(owner_id)',
     ];
 
     final batch = db.batch();
@@ -224,6 +257,7 @@ class AppDatabase {
       }
 
       await txn.insert('children', {
+        'owner_id': 'demo',
         'name': 'Миша',
         'age_months': 54,
         'notes': 'любит игры с карточками; цели: речь + внимание',
@@ -274,7 +308,12 @@ class AppDatabase {
 
   Future<List<ChildProfile>> getChildren() async {
     final db = await database;
-    final rows = await db.query('children', orderBy: 'id');
+    final rows = await db.query(
+      'children',
+      where: 'owner_id = ?',
+      whereArgs: [_ownerId],
+      orderBy: 'id',
+    );
     return rows.map(ChildProfile.fromMap).toList();
   }
 
@@ -285,6 +324,7 @@ class AppDatabase {
   }) async {
     final db = await database;
     return db.insert('children', {
+      'owner_id': _ownerId,
       'name': name.trim(),
       'age_months': ageMonths,
       'notes': notes?.trim(),
@@ -296,8 +336,8 @@ class AppDatabase {
     await db.update(
       'children',
       {'notes': notes?.trim()},
-      where: 'id = ?',
-      whereArgs: [childId],
+      where: 'id = ? and owner_id = ?',
+      whereArgs: [childId, _ownerId],
     );
   }
 
@@ -434,7 +474,19 @@ class AppDatabase {
     String? comment,
   }) async {
     final db = await database;
+    final ownedChild =
+        Sqflite.firstIntValue(
+          await db.rawQuery(
+            'select count(*) from children where id = ? and owner_id = ?',
+            [childId, _ownerId],
+          ),
+        ) ??
+        0;
+    if (ownedChild == 0) {
+      throw StateError('Профиль ребёнка не принадлежит текущему пользователю');
+    }
     return db.insert('activity_logs', {
+      'owner_id': _ownerId,
       'child_id': childId,
       'activity_id': activityId,
       'date_time': DateTime.now().toIso8601String(),
@@ -446,8 +498,12 @@ class AppDatabase {
 
   Future<List<ActivityLog>> getLogs({int? childId, int limit = 30}) async {
     final db = await database;
-    final where = childId == null ? '' : 'where l.child_id = ?';
-    final args = childId == null ? <Object?>[] : <Object?>[childId];
+    final where = childId == null
+        ? 'where l.owner_id = ?'
+        : 'where l.owner_id = ? and l.child_id = ?';
+    final args = childId == null
+        ? <Object?>[_ownerId]
+        : <Object?>[_ownerId, childId];
     final rows = await db.rawQuery('''
       select l.*, a.title as activity_title, c.name as child_name
       from activity_logs l

@@ -205,6 +205,8 @@ mobile_app/windows/x86/
 *.sqlite-wal
 *.sqlite-shm
 *.db-journal
+server/users.db
+server/tests/test_auth.db
 
 # =============================================================================
 # Generated archives and local exports
@@ -215,4 +217,3 @@ mobile_app/windows/x86/
 *.tar
 *.tar.gz
 *.tgz
-

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'app_database.dart';
+import 'auth_models.dart';
+import 'auth_service.dart';
 import 'models.dart';
 import 'sync_service.dart';
 
@@ -16,11 +18,14 @@ const _card = Color(0xF2FFFFFF);
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppDatabase.instance.database;
-  runApp(const PreschoolKnowledgeApp());
+  final authenticated = await AuthService.instance.initialize();
+  runApp(PreschoolKnowledgeApp(initiallyAuthenticated: authenticated));
 }
 
 class PreschoolKnowledgeApp extends StatelessWidget {
-  const PreschoolKnowledgeApp({super.key});
+  const PreschoolKnowledgeApp({super.key, this.initiallyAuthenticated = false});
+
+  final bool initiallyAuthenticated;
 
   @override
   Widget build(BuildContext context) {
@@ -39,31 +44,59 @@ class PreschoolKnowledgeApp extends StatelessWidget {
           context,
         ).textTheme.apply(bodyColor: _text, displayColor: _text),
       ),
-      home: const KnowledgeRoot(),
+      home: KnowledgeRoot(initiallyAuthenticated: initiallyAuthenticated),
     );
   }
 }
 
 class KnowledgeRoot extends StatefulWidget {
-  const KnowledgeRoot({super.key});
+  const KnowledgeRoot({super.key, required this.initiallyAuthenticated});
+
+  final bool initiallyAuthenticated;
 
   @override
   State<KnowledgeRoot> createState() => _KnowledgeRootState();
 }
 
 class _KnowledgeRootState extends State<KnowledgeRoot> {
-  var _authorized = false;
+  late bool _authorized;
+
+  @override
+  void initState() {
+    super.initState();
+    _authorized = widget.initiallyAuthenticated;
+    if (_authorized) {
+      AppDatabase.instance.setActiveOwnerId(
+        AuthService.instance.currentUser!.id,
+      );
+    }
+  }
+
+  void _authenticated() {
+    AppDatabase.instance.setActiveOwnerId(AuthService.instance.currentUser!.id);
+    setState(() => _authorized = true);
+  }
+
+  Future<void> _logout() async {
+    await AuthService.instance.logout();
+    AppDatabase.instance.setActiveOwnerId(null);
+    if (mounted) {
+      setState(() => _authorized = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return _authorized
-        ? const MainShell()
-        : LoginScreen(onEnter: () => setState(() => _authorized = true));
+        ? MainShell(onLogout: _logout)
+        : LoginScreen(onAuthenticated: _authenticated);
   }
 }
 
 class MainShell extends StatefulWidget {
-  const MainShell({super.key});
+  const MainShell({super.key, required this.onLogout});
+
+  final Future<void> Function() onLogout;
 
   @override
   State<MainShell> createState() => _MainShellState();
@@ -137,7 +170,10 @@ class _MainShellState extends State<MainShell> {
   Future<void> _openSync() async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => SyncScreen(onSynced: () async => _reloadChildren()),
+        builder: (_) => SyncScreen(
+          onSynced: () async => _reloadChildren(),
+          onSessionExpired: widget.onLogout,
+        ),
       ),
     );
     if (mounted) {
@@ -163,11 +199,13 @@ class _MainShellState extends State<MainShell> {
       ),
       ProfilePage(
         key: ValueKey('profile-$_version'),
+        authUser: AuthService.instance.currentUser!,
         children: _children,
         selectedChild: _selectedChild,
         onSelectChild: _selectChild,
         onChildCreated: (id) => _reloadChildren(selectId: id),
         onChildChanged: () => _reloadChildren(selectId: _selectedChild?.id),
+        onLogout: widget.onLogout,
       ),
     ];
 
@@ -217,23 +255,84 @@ class _MainShellState extends State<MainShell> {
 }
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key, required this.onEnter});
+  const LoginScreen({super.key, required this.onAuthenticated});
 
-  final VoidCallback onEnter;
+  final VoidCallback onAuthenticated;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _loginController = TextEditingController();
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  late final TextEditingController _serverController;
+  var _registerMode = false;
+  var _submitting = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _serverController = TextEditingController(
+      text: AuthService.instance.baseUrl,
+    );
+  }
 
   @override
   void dispose() {
-    _loginController.dispose();
+    _nameController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
+    _serverController.dispose();
     super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    final name = _nameController.text.trim();
+    if (email.isEmpty || password.isEmpty || (_registerMode && name.isEmpty)) {
+      setState(() => _error = 'Заполните обязательные поля');
+      return;
+    }
+    if (_registerMode && password.length < 8) {
+      setState(() => _error = 'Пароль должен содержать не менее 8 символов');
+      return;
+    }
+
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      if (_registerMode) {
+        await AuthService.instance.register(
+          name: name,
+          email: email,
+          password: password,
+          serverUrl: _serverController.text,
+        );
+      } else {
+        await AuthService.instance.login(
+          email: email,
+          password: password,
+          serverUrl: _serverController.text,
+        );
+      }
+      if (mounted) {
+        widget.onAuthenticated();
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = error.toString());
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _submitting = false);
+      }
+    }
   }
 
   @override
@@ -249,11 +348,21 @@ class _LoginScreenState extends State<LoginScreen> {
         SoftCard(
           child: Column(
             children: [
+              if (_registerMode) ...[
+                AppTextField(
+                  label: 'Имя',
+                  controller: _nameController,
+                  hint: 'например: Регина',
+                  icon: Icons.person_outline_rounded,
+                ),
+                const SizedBox(height: 10),
+              ],
               AppTextField(
-                label: 'Почта или логин',
-                controller: _loginController,
+                label: 'Электронная почта',
+                controller: _emailController,
                 hint: 'например: parent@mail.com',
                 icon: Icons.alternate_email_rounded,
+                keyboardType: TextInputType.emailAddress,
               ),
               const SizedBox(height: 10),
               AppTextField(
@@ -263,20 +372,57 @@ class _LoginScreenState extends State<LoginScreen> {
                 icon: Icons.lock_outline_rounded,
                 obscureText: true,
               ),
+              const SizedBox(height: 10),
+              AppTextField(
+                label: 'Адрес сервера',
+                controller: _serverController,
+                hint: AuthService.defaultServerUrl,
+                icon: Icons.dns_rounded,
+                keyboardType: TextInputType.url,
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _error!,
+                    style: const TextStyle(
+                      color: Colors.redAccent,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               TwoColumns(
                 children: [
                   SoftButton(
-                    label: 'Войти',
-                    icon: Icons.login_rounded,
+                    label: _submitting
+                        ? 'Подождите'
+                        : _registerMode
+                        ? 'Создать аккаунт'
+                        : 'Войти',
+                    icon: _registerMode
+                        ? Icons.person_add_alt_1_rounded
+                        : Icons.login_rounded,
                     primary: true,
-                    onPressed: widget.onEnter,
+                    onPressed: _submitting ? null : _submit,
                   ),
                   SoftButton(
-                    label: 'Пропустить',
-                    icon: Icons.arrow_forward_rounded,
+                    label: _registerMode
+                        ? 'У меня есть аккаунт'
+                        : 'Регистрация',
+                    icon: _registerMode
+                        ? Icons.login_rounded
+                        : Icons.person_add_alt_1_rounded,
                     ghost: true,
-                    onPressed: widget.onEnter,
+                    onPressed: _submitting
+                        ? null
+                        : () => setState(() {
+                            _registerMode = !_registerMode;
+                            _error = null;
+                          }),
                   ),
                 ],
               ),
@@ -925,18 +1071,22 @@ class _DoneScreenState extends State<DoneScreen> {
 class ProfilePage extends StatelessWidget {
   const ProfilePage({
     super.key,
+    required this.authUser,
     required this.children,
     required this.selectedChild,
     required this.onSelectChild,
     required this.onChildCreated,
     required this.onChildChanged,
+    required this.onLogout,
   });
 
+  final AuthUser authUser;
   final List<ChildProfile> children;
   final ChildProfile? selectedChild;
   final ValueChanged<ChildProfile> onSelectChild;
   final ValueChanged<int> onChildCreated;
   final VoidCallback onChildChanged;
+  final Future<void> Function() onLogout;
 
   Future<_ProfileData> _loadData() async {
     final db = AppDatabase.instance;
@@ -963,6 +1113,36 @@ class ProfilePage extends StatelessWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                SoftCard(
+                  child: Row(
+                    children: [
+                      const Icon(Icons.account_circle_rounded, size: 42),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              authUser.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(authUser.email, style: _smallMuted),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Выйти из аккаунта',
+                        onPressed: onLogout,
+                        icon: const Icon(Icons.logout_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
                 SoftCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1213,25 +1393,23 @@ class ProfilePage extends StatelessWidget {
 }
 
 class SyncScreen extends StatefulWidget {
-  const SyncScreen({super.key, required this.onSynced});
+  const SyncScreen({
+    super.key,
+    required this.onSynced,
+    required this.onSessionExpired,
+  });
 
   final Future<void> Function() onSynced;
+  final Future<void> Function() onSessionExpired;
 
   @override
   State<SyncScreen> createState() => _SyncScreenState();
 }
 
 class _SyncScreenState extends State<SyncScreen> {
-  final _serverController = TextEditingController(text: 'http://10.0.2.2:8000');
   final _db = AppDatabase.instance;
   var _syncing = false;
   String? _message;
-
-  @override
-  void dispose() {
-    _serverController.dispose();
-    super.dispose();
-  }
 
   Future<_SyncData> _loadData() async {
     return _SyncData(
@@ -1247,7 +1425,7 @@ class _SyncScreenState extends State<SyncScreen> {
     });
 
     try {
-      final result = await SyncService(_db).synchronize(_serverController.text);
+      final result = await SyncService(_db, AuthService.instance).synchronize();
       if (!mounted) {
         return;
       }
@@ -1258,6 +1436,11 @@ class _SyncScreenState extends State<SyncScreen> {
       });
     } catch (error) {
       if (!mounted) {
+        return;
+      }
+      if (error is AuthException) {
+        Navigator.of(context).pop();
+        await widget.onSessionExpired();
         return;
       }
       setState(() => _message = 'Ошибка обновления: $error');
@@ -1300,12 +1483,10 @@ class _SyncScreenState extends State<SyncScreen> {
                         style: _smallMuted,
                       ),
                       const AppDivider(),
-                      AppTextField(
-                        label: 'Адрес API',
-                        controller: _serverController,
-                        hint: 'http://10.0.2.2:8000',
+                      InfoTile(
                         icon: Icons.dns_rounded,
-                        keyboardType: TextInputType.url,
+                        title: 'Сервер авторизации и обновлений',
+                        subtitle: AuthService.instance.baseUrl,
                       ),
                       const SizedBox(height: 12),
                       TwoColumns(

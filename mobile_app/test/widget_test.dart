@@ -7,6 +7,14 @@ void main() {
 
     expect(find.text('База знаний дошкольника'), findsOneWidget);
     expect(find.text('Войти'), findsOneWidget);
-    expect(find.text('Пропустить'), findsOneWidget);
+    expect(find.text('Регистрация'), findsOneWidget);
+    expect(find.text('Пропустить'), findsNothing);
+
+    await tester.ensureVisible(find.text('Регистрация'));
+    await tester.tap(find.text('Регистрация'));
+    await tester.pump();
+
+    expect(find.text('Создать аккаунт'), findsOneWidget);
+    expect(find.text('Имя'), findsOneWidget);
   });
 }

@@ -1,21 +1,20 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:http/http.dart' as http;
-
 import 'app_database.dart';
+import 'auth_service.dart';
 import 'models.dart';
 
 class SyncService {
-  SyncService(this._database);
+  SyncService(this._database, this._authService);
 
   final AppDatabase _database;
+  final AuthService _authService;
 
-  Future<RemoteApplyResult> synchronize(String baseUrl) async {
+  Future<RemoteApplyResult> synchronize() async {
     final sessionId = await _database.startSyncSession();
     try {
-      final uri = _contentUri(baseUrl);
-      final response = await http.get(uri).timeout(const Duration(seconds: 15));
+      final response = await _authService.authorizedGet('/api/content');
       if (response.statusCode != 200) {
         throw SyncException('Сервер вернул код ${response.statusCode}');
       }
@@ -36,14 +35,6 @@ class SyncService {
       );
       rethrow;
     }
-  }
-
-  Uri _contentUri(String baseUrl) {
-    final normalized = baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
-    if (normalized.isEmpty) {
-      throw SyncException('Укажите адрес сервера обновлений');
-    }
-    return Uri.parse('$normalized/api/content');
   }
 }
 
