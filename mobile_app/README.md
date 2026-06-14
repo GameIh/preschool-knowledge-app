@@ -1,6 +1,24 @@
 # preschool_knowledge_app
 
-A new Flutter project.
+## Сборка с адресом сервера
+
+Из папки `mobile_app`:
+
+```powershell
+.\build-apk.ps1 -ServerIp 194.34.239.165
+```
+
+По умолчанию используется порт `8081`, протокол `http` и release-сборка. Все параметры можно задать явно:
+
+```powershell
+.\build-apk.ps1 -ServerIp 194.34.239.165 -Port 8081 -Scheme http -Mode release
+```
+
+Также можно вызвать Flutter напрямую, передав полный URL:
+
+```powershell
+flutter build apk --release --dart-define=API_BASE_URL=http://194.34.239.165:8081
+```
 
 ## Getting Started
 

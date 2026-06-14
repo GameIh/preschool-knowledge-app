@@ -1,0 +1,28 @@
+services:
+  api:
+    build:
+      context: ./server
+    restart: unless-stopped
+    env_file:
+      - ./server/.env
+    environment:
+      DATABASE_URL: sqlite:////data/users.db
+      CONTENT_PATH: /app/content.json
+    ports:
+      - "8081:8000"
+    volumes:
+      - api_data:/data
+      - ./server/content.json:/app/content.json:ro
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5)
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  api_data:

@@ -267,25 +267,15 @@ class _LoginScreenState extends State<LoginScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  late final TextEditingController _serverController;
   var _registerMode = false;
   var _submitting = false;
   String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _serverController = TextEditingController(
-      text: AuthService.instance.baseUrl,
-    );
-  }
 
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
-    _serverController.dispose();
     super.dispose();
   }
 
@@ -312,21 +302,23 @@ class _LoginScreenState extends State<LoginScreen> {
           name: name,
           email: email,
           password: password,
-          serverUrl: _serverController.text,
         );
       } else {
-        await AuthService.instance.login(
-          email: email,
-          password: password,
-          serverUrl: _serverController.text,
-        );
+        await AuthService.instance.login(email: email, password: password);
       }
       if (mounted) {
         widget.onAuthenticated();
       }
-    } catch (error) {
+    } on AuthException catch (error) {
       if (mounted) {
-        setState(() => _error = error.toString());
+        setState(() => _error = error.message);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error =
+              'Не удалось подключиться. Проверьте интернет и попробуйте снова.',
+        );
       }
     } finally {
       if (mounted) {
@@ -338,10 +330,8 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return PageShell(
-      status: 'Приложение • Login',
       title: 'База знаний дошкольника',
       subtitle: 'Развитие • упражнения • прогресс',
-      action: const Pill(label: 'offline + обновления'),
       children: [
         const HeroPanel(),
         const SizedBox(height: 12),
@@ -371,14 +361,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 hint: 'пароль',
                 icon: Icons.lock_outline_rounded,
                 obscureText: true,
-              ),
-              const SizedBox(height: 10),
-              AppTextField(
-                label: 'Адрес сервера',
-                controller: _serverController,
-                hint: AuthService.defaultServerUrl,
-                icon: Icons.dns_rounded,
-                keyboardType: TextInputType.url,
               ),
               if (_error != null) ...[
                 const SizedBox(height: 10),
@@ -455,14 +437,12 @@ class HomePage extends StatelessWidget {
     return _HomeData(
       recommendations: await db.getRecommended(child),
       logs: await db.getLogs(childId: child?.id, limit: 3),
-      syncState: await db.getSyncState(),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return PageShell(
-      status: 'Приложение • Home',
       title: 'Главная',
       subtitle: 'Подбор занятий и быстрые действия',
       action: SoftChipButton(
@@ -590,18 +570,7 @@ class HomePage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          const Expanded(
-                            child: SectionTitle('Последние занятия'),
-                          ),
-                          Pill(
-                            label: data.syncState.lastSyncAt == null
-                                ? 'без синхронизации'
-                                : 'обновлено ${formatDate(data.syncState.lastSyncAt)}',
-                          ),
-                        ],
-                      ),
+                      const SectionTitle('Последние занятия'),
                       const SizedBox(height: 12),
                       if (data.logs.isEmpty)
                         const EmptyState(
@@ -665,7 +634,6 @@ class _CatalogPageState extends State<CatalogPage> {
   @override
   Widget build(BuildContext context) {
     return PageShell(
-      status: 'Приложение • Catalog',
       title: 'Каталог',
       subtitle: 'Фильтр по возрасту, направлениям и тегам',
       children: [
@@ -830,7 +798,6 @@ class ActivityDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PageShell(
-      status: 'Приложение • Activity',
       title: 'Карточка упражнения',
       subtitle: 'Описание, шаги выполнения, отметка прогресса',
       action: SoftChipButton(
@@ -995,7 +962,6 @@ class _DoneScreenState extends State<DoneScreen> {
   @override
   Widget build(BuildContext context) {
     return PageShell(
-      status: 'Приложение • Done',
       title: 'Готово',
       subtitle: 'Отметка о выполнении будет сохранена',
       action: SoftChipButton(
@@ -1099,7 +1065,6 @@ class ProfilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PageShell(
-      status: 'Приложение • Profile',
       title: 'Профиль',
       subtitle: 'Дети, цели и история занятий',
       children: [
@@ -1411,13 +1376,6 @@ class _SyncScreenState extends State<SyncScreen> {
   var _syncing = false;
   String? _message;
 
-  Future<_SyncData> _loadData() async {
-    return _SyncData(
-      state: await _db.getSyncState(),
-      sessions: await _db.getSyncSessions(),
-    );
-  }
-
   Future<void> _sync() async {
     setState(() {
       _syncing = true;
@@ -1431,8 +1389,9 @@ class _SyncScreenState extends State<SyncScreen> {
       }
       await widget.onSynced();
       setState(() {
-        _message =
-            'Добавлено: ${result.inserted}, обновлено: ${result.updated}, удалено: ${result.deleted}';
+        _message = result.inserted + result.updated + result.deleted > 0
+            ? 'Материалы обновлены.'
+            : 'У вас уже установлены актуальные материалы.';
       });
     } catch (error) {
       if (!mounted) {
@@ -1443,7 +1402,10 @@ class _SyncScreenState extends State<SyncScreen> {
         await widget.onSessionExpired();
         return;
       }
-      setState(() => _message = 'Ошибка обновления: $error');
+      setState(
+        () => _message =
+            'Не удалось обновить материалы. Проверьте подключение к интернету и попробуйте снова.',
+      );
     } finally {
       if (mounted) {
         setState(() => _syncing = false);
@@ -1454,102 +1416,37 @@ class _SyncScreenState extends State<SyncScreen> {
   @override
   Widget build(BuildContext context) {
     return PageShell(
-      status: 'Приложение • Sync',
       title: 'Обновления',
-      subtitle: 'Загрузка новых заданий и медиа',
+      subtitle: 'Новые задания и материалы',
       action: SoftChipButton(
         label: 'Главная',
         icon: Icons.arrow_back_rounded,
         onPressed: () => Navigator.of(context).pop(),
       ),
       children: [
-        FutureBuilder<_SyncData>(
-          future: _loadData(),
-          builder: (context, snapshot) {
-            final data = snapshot.data;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SoftCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SectionTitle('Состояние синхронизации'),
-                      const SizedBox(height: 4),
-                      Text(
-                        data == null
-                            ? 'Загрузка состояния'
-                            : 'Последняя проверка: ${formatDate(data.state.lastSyncAt)} • версия: ${data.state.contentVersion ?? 'локальная'}',
-                        style: _smallMuted,
-                      ),
-                      const AppDivider(),
-                      InfoTile(
-                        icon: Icons.dns_rounded,
-                        title: 'Сервер авторизации и обновлений',
-                        subtitle: AuthService.instance.baseUrl,
-                      ),
-                      const SizedBox(height: 12),
-                      TwoColumns(
-                        children: [
-                          SoftButton(
-                            label: _syncing ? 'Проверка' : 'Проверить',
-                            icon: Icons.sync_rounded,
-                            primary: true,
-                            onPressed: _syncing ? null : _sync,
-                          ),
-                          SoftButton(
-                            label: 'История',
-                            icon: Icons.history_rounded,
-                            onPressed: () => setState(() {}),
-                          ),
-                        ],
-                      ),
-                      if (_message != null) ...[
-                        const SizedBox(height: 12),
-                        Text(_message!, style: _bodyMuted),
-                      ],
-                    ],
-                  ),
-                ),
+        SoftCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SectionTitle('Обновить материалы'),
+              const SizedBox(height: 4),
+              const Text(
+                'Загрузите новые упражнения и рекомендации для занятий.',
+                style: _bodyMuted,
+              ),
+              const SizedBox(height: 12),
+              SoftButton(
+                label: _syncing ? 'Обновляем' : 'Обновить',
+                icon: Icons.sync_rounded,
+                primary: true,
+                onPressed: _syncing ? null : _sync,
+              ),
+              if (_message != null) ...[
                 const SizedBox(height: 12),
-                SoftCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SectionTitle('История обновлений'),
-                      const SizedBox(height: 12),
-                      if (data == null)
-                        const EmptyState(
-                          icon: Icons.hourglass_empty_rounded,
-                          text: 'Загрузка истории.',
-                        )
-                      else if (data.sessions.isEmpty)
-                        const EmptyState(
-                          icon: Icons.cloud_sync_rounded,
-                          text: 'Обновления ещё не запускались.',
-                        )
-                      else
-                        ...data.sessions.map(
-                          (session) => Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: InfoTile(
-                              icon: session.status == 'success'
-                                  ? Icons.check_rounded
-                                  : Icons.error_outline_rounded,
-                              title: session.status == 'success'
-                                  ? 'Успешное обновление'
-                                  : 'Ошибка обновления',
-                              subtitle:
-                                  '${formatDate(session.startedAt)} • ${session.errorMessage ?? session.source}',
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
+                Text(_message!, style: _bodyMuted),
               ],
-            );
-          },
+            ],
+          ),
         ),
       ],
     );
@@ -1559,14 +1456,12 @@ class _SyncScreenState extends State<SyncScreen> {
 class PageShell extends StatelessWidget {
   const PageShell({
     super.key,
-    required this.status,
     required this.title,
     required this.subtitle,
     required this.children,
     this.action,
   });
 
-  final String status;
   final String title;
   final String subtitle;
   final Widget? action;
@@ -1579,23 +1474,16 @@ class PageShell extends StatelessWidget {
       child: GradientBackground(
         child: SafeArea(
           bottom: false,
-          child: Column(
-            children: [
-              StatusStrip(status),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      TopBar(title: title, subtitle: subtitle, action: action),
-                      const SizedBox(height: 14),
-                      ...children,
-                    ],
-                  ),
-                ),
-              ),
-            ],
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TopBar(title: title, subtitle: subtitle, action: action),
+                const SizedBox(height: 14),
+                ...children,
+              ],
+            ),
           ),
         ),
       ),
@@ -1624,32 +1512,6 @@ class GradientBackground extends StatelessWidget {
         ),
       ),
       child: child,
-    );
-  }
-}
-
-class StatusStrip extends StatelessWidget {
-  const StatusStrip(this.text, {super.key});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 40,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.58),
-        border: const Border(bottom: BorderSide(color: _border)),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: _text.withValues(alpha: 0.56),
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
     );
   }
 }
@@ -2250,15 +2112,10 @@ class AppDivider extends StatelessWidget {
 }
 
 class _HomeData {
-  const _HomeData({
-    required this.recommendations,
-    required this.logs,
-    required this.syncState,
-  });
+  const _HomeData({required this.recommendations, required this.logs});
 
   final List<Activity> recommendations;
   final List<ActivityLog> logs;
-  final SyncStateInfo syncState;
 }
 
 class _CatalogData {
@@ -2273,13 +2130,6 @@ class _ProfileData {
 
   final List<ActivityLog> logs;
   final List<String> domains;
-}
-
-class _SyncData {
-  const _SyncData({required this.state, required this.sessions});
-
-  final SyncStateInfo state;
-  final List<SyncSession> sessions;
 }
 
 const _smallMuted = TextStyle(color: _muted, fontSize: 12);

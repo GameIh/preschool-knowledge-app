@@ -11,28 +11,25 @@ class AuthService {
 
   static final AuthService instance = AuthService._();
 
-  static const defaultServerUrl = 'http://10.0.2.2:8000';
+  static const _serverUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://194.34.239.165:8081',
+  );
   static const _accessTokenKey = 'auth_access_token';
   static const _refreshTokenKey = 'auth_refresh_token';
-  static const _serverUrlKey = 'auth_server_url';
 
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
   final http.Client _client = http.Client();
 
-  String _baseUrl = defaultServerUrl;
   String? _accessToken;
   String? _refreshToken;
   AuthUser? _currentUser;
   Future<bool>? _refreshOperation;
 
-  String get baseUrl => _baseUrl;
   AuthUser? get currentUser => _currentUser;
   bool get isAuthenticated => _currentUser != null && _refreshToken != null;
 
   Future<bool> initialize() async {
-    _baseUrl = _normalizeBaseUrl(
-      await _storage.read(key: _serverUrlKey) ?? defaultServerUrl,
-    );
     _accessToken = await _storage.read(key: _accessTokenKey);
     _refreshToken = await _storage.read(key: _refreshTokenKey);
     if (_refreshToken == null) {
@@ -41,18 +38,11 @@ class AuthService {
     return refreshSession();
   }
 
-  Future<void> setServerUrl(String value) async {
-    _baseUrl = _normalizeBaseUrl(value);
-    await _storage.write(key: _serverUrlKey, value: _baseUrl);
-  }
-
   Future<AuthUser> register({
     required String name,
     required String email,
     required String password,
-    required String serverUrl,
   }) async {
-    await setServerUrl(serverUrl);
     final tokens = await _postTokens('/api/auth/register', {
       'name': name.trim(),
       'email': email.trim(),
@@ -66,9 +56,7 @@ class AuthService {
   Future<AuthUser> login({
     required String email,
     required String password,
-    required String serverUrl,
   }) async {
-    await setServerUrl(serverUrl);
     final tokens = await _postTokens('/api/auth/login', {
       'email': email.trim(),
       'password': password,
@@ -174,7 +162,7 @@ class AuthService {
     await _storage.write(key: _refreshTokenKey, value: tokens.refreshToken);
   }
 
-  Uri _uri(String path) => Uri.parse('$_baseUrl$path');
+  Uri _uri(String path) => Uri.parse('$_serverUrl$path');
 
   Map<String, String> get _jsonHeaders => const {
     'Content-Type': 'application/json',
@@ -192,7 +180,9 @@ class AuthService {
     }
     final decoded = jsonDecode(utf8.decode(response.bodyBytes));
     if (decoded is! Map<String, dynamic>) {
-      throw const AuthException('Сервер вернул неверный формат данных');
+      throw const AuthException(
+        'Не удалось выполнить запрос. Попробуйте позже.',
+      );
     }
     return decoded;
   }
@@ -202,19 +192,7 @@ class AuthService {
     if (detail is String && detail.isNotEmpty) {
       return detail;
     }
-    return 'Ошибка сервера: $statusCode';
-  }
-
-  static String _normalizeBaseUrl(String value) {
-    final normalized = value.trim().replaceAll(RegExp(r'/+$'), '');
-    if (normalized.isEmpty) {
-      throw const AuthException('Укажите адрес сервера');
-    }
-    final uri = Uri.tryParse(normalized);
-    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
-      throw const AuthException('Укажите корректный адрес сервера');
-    }
-    return normalized;
+    return 'Не удалось выполнить запрос. Попробуйте позже.';
   }
 }
 
